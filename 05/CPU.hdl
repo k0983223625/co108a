@@ -40,4 +40,56 @@ CHIP CPU {
 
     PARTS:
     // Put your code here:
+    //利用Or16來命名instruction的每個位元(因為跟 0(false) Or之後還是原本的值)
+    //C指令: isC  1  1  a(因為a容易混淆 以下a命名為aa)  c1  c2  c3  c4  c5  c6  d1  d2  d3  j1  j2  j3
+    Or16(a=false,b=instruction,out[15]=isC,out[14]=true,out[13]=true,out[12]=aa,out[11]=c1,out[10]=c2,out[9]=c3,out[8]=c4,out[7]=c5,out[6]=c6,out[5]=d1,out[4]=d2,out[3]=d3,out[2]=j1,out[1]=j2,out[0]=j3);
+
+    //c1(isC)
+    //確定是不是C指令
+    Mux16(a=instruction,b=aluout,sel=isC,out=CorA);
+
+    //A暫存  c2(isA or (isC and d1) )
+    //看是 A指令 或是 要A暫存器結果的C指令
+    Not(in=isC,out=isA);
+    And(a=isC,b=d1,out=andisCd1);
+    Or(a=isA,b=andisCd1,out=cc2);
+    ARegister(in=CorA,load=cc2,out=Areg,out[0..14]=addressM);
+
+    //c3(a)
+    //用來選擇從A或從M做運算
+    Mux16(a=Areg,b=inM,sel=aa,out=muxAM);
+
+    //c4
+    //1.因為zr是"=",ng是"<",需要用ng,zr做出大於(PO=ng'&zr',ng'代表>=,zr'代表">"或"<")
+    Not(in=ng,out=notng);
+    Not(in=zr,out=notzr);
+    And(a=notng,b=notzr,out=PO);
+
+    //2.有j1=ng或j2=zr或j3=PO任一情況就可以跳了
+    And(a=j1,b=ng,out=out1);
+    And(a=j2,b=zr,out=out2);
+    And(a=j3,b=PO,out=out3);
+    Or(a=out1,b=out2,out=out4);
+    Or(a=out3,b=out4,out=jnj);
+
+    //如果用到A暫存器跟D暫存器,就要用isC檢查
+    And(a=isC, b=jnj, out=PCload);
+    PC(in=Areg,load=PCload,inc=true,reset=reset,out[0..14]=pc);
+
+    //c5,c8
+    //c5是ALU的6條控制線zx(c1) nx(c2) zy(c3) ny(c4) f(c5) no(c6)
+    //c8是ng(j1) zr(j2)
+    ALU(x=Dreg,y=muxAM,zx=c1,nx=c2,zy=c3,ny=c4,f=c5,no=c6,out=aluout,out=outM,zr=zr,ng=ng);
+
+
+    //c6(isC and d2)
+    //確定是不是C指令且要不要寫入D
+    And(a=isC,b=d2,out=Dload);
+    DRegister(in=aluout,load=Dload,out=Dreg);
+
+
+    //c7(d3)--writeM
+    //看要不要寫入M
+    And(a=isC,b=d3,out=writeM);
+
 }
